@@ -3,6 +3,7 @@ package com.example.dashika.cameraclassifiers.DI;
 import android.content.Context;
 
 import com.example.dashika.cameraclassifiers.Presenter.BasePresenter;
+import com.example.dashika.cameraclassifiers.Presenter.LoadingPresenter;
 import com.example.dashika.cameraclassifiers.View.Fragment.Camera2BasicFragment;
 import com.example.dashika.cameraclassifiers.View.Fragment.LoadingFragment;
 
@@ -17,6 +18,8 @@ public interface AppComponent {
     Context context();
 
     void inject(BasePresenter basePresenter);
+
+    void inject(LoadingPresenter loadingPresenter);
 
     void inject(Camera2BasicFragment camera2BasicFragment);
 

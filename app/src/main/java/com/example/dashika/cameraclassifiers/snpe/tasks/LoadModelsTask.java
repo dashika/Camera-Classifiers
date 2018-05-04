@@ -1,8 +1,3 @@
-/*
- * Copyright (c) 2016 Qualcomm Technologies, Inc.
- * All Rights Reserved.
- * Confidential and Proprietary - Qualcomm Technologies, Inc.
- */
 package com.example.dashika.cameraclassifiers.snpe.tasks;
 
 import android.content.Context;
@@ -19,6 +14,7 @@ import java.io.FileFilter;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.lang.ref.WeakReference;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -34,16 +30,16 @@ public class LoadModelsTask extends AsyncTask<Void, Void, Set<SNPEModel>> {
     private static final String JPG_EXT = ".jpg";
     private static final String LOG_TAG = LoadModelsTask.class.getSimpleName();
 
-    private final Context mContext;
+    private WeakReference<Context> mContext;
 
     public LoadModelsTask(Context context) {
-        mContext = context;
+        mContext = new WeakReference<>(context);
     }
 
     @Override
     protected Set<SNPEModel> doInBackground(Void... params) {
         final Set<SNPEModel> result = new LinkedHashSet<>();
-        final File modelsRoot = mContext.getExternalFilesDir("models");
+        final File modelsRoot = mContext.get().getExternalFilesDir("models");
         if (modelsRoot != null) {
             result.addAll(createModels(modelsRoot));
         }

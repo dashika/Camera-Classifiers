@@ -39,7 +39,7 @@ public class LoadingFragment extends BaseFragment {
                 @Override
                 public void onChange(boolean selfChange) {
                     super.onChange(selfChange);
-                    loadModels();
+                    loadingPresenter.loadModels();
                 }
             };
 
@@ -58,6 +58,13 @@ public class LoadingFragment extends BaseFragment {
     }
 
     @Override
+    public void onResume()
+    {
+        super.onResume();
+        loadingPresenter.loadModels();
+    }
+
+    @Override
     public void onAttach(Context context) {
         super.onAttach(context);
         ApplicationCameraClassifiers.getComponent().inject(this);
@@ -67,17 +74,12 @@ public class LoadingFragment extends BaseFragment {
                 SNPEModel.MODELS_URI, SNPEModel.INVALID_ID), false, mModelExtractionFailedObserver);
 
         contentResolver.registerContentObserver(SNPEModel.MODELS_URI, true, mModelExtractionObserver);
+
         startModelsExtraction();
-        loadModels();
     }
 
     private void startModelsExtraction() {
         ModelExtractionService.extractModel(context, R.raw.inception_v3);
-    }
-
-    private void loadModels() {
-        final LoadModelsTask task = new LoadModelsTask(context);
-        task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
     @Override
