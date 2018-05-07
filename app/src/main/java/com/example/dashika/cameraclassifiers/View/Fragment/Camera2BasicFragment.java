@@ -20,7 +20,6 @@ import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
-import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
@@ -35,12 +34,12 @@ import android.support.v4.app.DialogFragment;
 import android.support.v4.content.ContextCompat;
 import android.util.Log;
 import android.util.Size;
-import android.util.SparseIntArray;
 import android.view.LayoutInflater;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -94,19 +93,16 @@ public class Camera2BasicFragment extends BaseFragment
 
     private CameraCaptureSession.CaptureCallback mCaptureCallback =
             new CameraCaptureSession.CaptureCallback() {
-
                 @Override
-                public void onCaptureProgressed(
-                        @NonNull CameraCaptureSession session,
-                        @NonNull CaptureRequest request,
-                        @NonNull CaptureResult partialResult) {
+                public void onCaptureProgressed(@NonNull CameraCaptureSession session,
+                                                @NonNull CaptureRequest request,
+                                                @NonNull CaptureResult partialResult) {
                 }
 
                 @Override
-                public void onCaptureCompleted(
-                        @NonNull CameraCaptureSession session,
-                        @NonNull CaptureRequest request,
-                        @NonNull TotalCaptureResult result) {
+                public void onCaptureCompleted(@NonNull CameraCaptureSession session,
+                                               @NonNull CaptureRequest request,
+                                               @NonNull TotalCaptureResult result) {
                 }
             };
 
@@ -149,7 +145,7 @@ public class Camera2BasicFragment extends BaseFragment
 
         @Override
         public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width, int height) {
-            configureTransform(width, height);
+
         }
 
         @Override
@@ -171,13 +167,16 @@ public class Camera2BasicFragment extends BaseFragment
                     synchronized (lock) {
                         if (runClassifier) {
                             runClassifier = false;
-
+                            //lockFocus();
                             try {
                                 bitmap = mTextureView.getBitmap(299, 299);
                                 if (bitmap != null) {
                                     cameraPresenter.classify(bitmap);
+                                } else {
+                                    runClassifier = true;
                                 }
                             } catch (Exception e) {
+                                runClassifier = true;
                                 e.printStackTrace();
                             }
                         }
@@ -186,18 +185,27 @@ public class Camera2BasicFragment extends BaseFragment
                 }
             };
 
-    private static Size chooseOptimalSize(Size[] choices, int textureViewWidth,
-                                          int textureViewHeight, int maxWidth, int maxHeight, Size aspectRatio) {
+    private ImageView imgAnalytic;
 
+    private static Size chooseOptimalSize(
+            Size[] choices,
+            int textureViewWidth,
+            int textureViewHeight,
+            int maxWidth,
+            int maxHeight,
+            Size aspectRatio) {
+
+        // Collect the supported resolutions that are at least as big as the preview Surface
         List<Size> bigEnough = new ArrayList<>();
+        // Collect the supported resolutions that are smaller than the preview Surface
         List<Size> notBigEnough = new ArrayList<>();
         int w = aspectRatio.getWidth();
         int h = aspectRatio.getHeight();
         for (Size option : choices) {
-            if (option.getWidth() <= maxWidth && option.getHeight() <= maxHeight &&
-                    option.getHeight() == option.getWidth() * h / w) {
-                if (option.getWidth() >= textureViewWidth &&
-                        option.getHeight() >= textureViewHeight) {
+            if (option.getWidth() <= maxWidth
+                    && option.getHeight() <= maxHeight
+                    && option.getHeight() == option.getWidth() * h / w) {
+                if (option.getWidth() >= textureViewWidth && option.getHeight() >= textureViewHeight) {
                     bigEnough.add(option);
                 } else {
                     notBigEnough.add(option);
@@ -205,6 +213,8 @@ public class Camera2BasicFragment extends BaseFragment
             }
         }
 
+        // Pick the smallest of those big enough. If there is no one big enough, pick the
+        // largest of those not big enough.
         if (bigEnough.size() > 0) {
             return Collections.min(bigEnough, new CompareSizesByArea());
         } else if (notBigEnough.size() > 0) {
@@ -239,6 +249,7 @@ public class Camera2BasicFragment extends BaseFragment
     public void onViewCreated(@NonNull final View view, Bundle savedInstanceState) {
         twResultSNPE = view.findViewById(R.id.twResultSNPE);
         mTextureView = view.findViewById(R.id.texture);
+        imgAnalytic = view.findViewById(R.id.imgAnalytic);
     }
 
     @Override
@@ -351,9 +362,9 @@ public class Camera2BasicFragment extends BaseFragment
 
                 int orientation = getResources().getConfiguration().orientation;
                 if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                    mTextureView.setAspectRatio(previewSize.getWidth(), previewSize.getHeight());
+                    mTextureView.setAspectRatio(previewSize.getWidth(), previewSize.getHeight(), MAX_PREVIEW_WIDTH, MAX_PREVIEW_HEIGHT,largest);
                 } else {
-                    mTextureView.setAspectRatio(previewSize.getHeight(), previewSize.getWidth());
+                    mTextureView.setAspectRatio(previewSize.getHeight(), previewSize.getWidth(), MAX_PREVIEW_WIDTH, MAX_PREVIEW_HEIGHT,largest);
                 }
 
                 this.mCameraId = cameraId;
@@ -405,7 +416,7 @@ public class Camera2BasicFragment extends BaseFragment
             checkedPermissions = true;
         }
         setUpCameraOutputs(width, height);
-        configureTransform(width, height);
+     //   configureTransform(width, height);
         Activity activity = getActivity();
         CameraManager manager = (CameraManager) activity.getSystemService(Context.CAMERA_SERVICE);
         try {
@@ -421,13 +432,38 @@ public class Camera2BasicFragment extends BaseFragment
         }
     }
 
-
-    private void runPrecaptureSequence() {
+    private void captureStillPicture() {
         try {
-            mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER,
-                    CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_START);
+            final Activity activity = getActivity();
+            if (null == activity || null == mCameraDevice) {
+                return;
+            }
+            // This is the CaptureRequest.Builder that we use to take a picture.
+            final CaptureRequest.Builder captureBuilder =
+                    mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+            captureBuilder.addTarget(mImageReader.getSurface());
+
+            // Use the same AE and AF modes as the preview.
+            captureBuilder.set(CaptureRequest.CONTROL_AF_MODE,
+                    CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+
+            mCaptureSession.stopRepeating();
+            mCaptureSession.abortCaptures();
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+   /* private void lockFocus() {
+        try {
+            if(mPreviewRequestBuilder == null || mCaptureSession == null) return;
+            mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER,
+                    CameraMetadata.CONTROL_AF_TRIGGER_START);
             mCaptureSession.capture(mPreviewRequestBuilder.build(), mCaptureCallback,
                     mBackgroundHandler);
+            mCaptureSession.stopRepeating();
+            mCaptureSession.abortCaptures();
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
@@ -435,16 +471,18 @@ public class Camera2BasicFragment extends BaseFragment
 
     private void unlockFocus() {
         try {
+            if(mPreviewRequestBuilder == null || mCaptureSession == null) return;
             mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER,
                     CameraMetadata.CONTROL_AF_TRIGGER_CANCEL);
             mCaptureSession.capture(mPreviewRequestBuilder.build(), mCaptureCallback,
                     mBackgroundHandler);
             mCaptureSession.setRepeatingRequest(mPreviewRequest, mCaptureCallback,
                     mBackgroundHandler);
-        } catch (CameraAccessException e) {
+        }
+        catch (CameraAccessException e) {
             e.printStackTrace();
         }
-    }
+    }*/
 
     private void closeCamera() {
         try {
@@ -540,32 +578,6 @@ public class Camera2BasicFragment extends BaseFragment
         }
     }
 
-    private void configureTransform(int viewWidth, int viewHeight) {
-        Activity activity = getActivity();
-        if (null == mTextureView || null == previewSize || null == activity) {
-            return;
-        }
-        int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
-        Matrix matrix = new Matrix();
-        RectF viewRect = new RectF(0, 0, viewWidth, viewHeight);
-        RectF bufferRect = new RectF(0, 0, previewSize.getHeight(), previewSize.getWidth());
-        float centerX = viewRect.centerX();
-        float centerY = viewRect.centerY();
-        if (Surface.ROTATION_90 == rotation || Surface.ROTATION_270 == rotation) {
-            bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY());
-            matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
-            float scale =
-                    Math.max(
-                            (float) viewHeight / previewSize.getHeight(),
-                            (float) viewWidth / previewSize.getWidth());
-            matrix.postScale(scale, scale, centerX, centerY);
-            matrix.postRotate(90 * (rotation - 2), centerX, centerY);
-        } else if (Surface.ROTATION_180 == rotation) {
-            matrix.postRotate(180, centerX, centerY);
-        }
-        mTextureView.setTransform(matrix);
-    }
-
     @Override
     protected Presenter getPresenter() {
         ApplicationCameraClassifiers.getComponent().inject(this);
@@ -590,12 +602,17 @@ public class Camera2BasicFragment extends BaseFragment
 
     @Override
     public void SetTextResult(String[] labels) {
-        bitmap.recycle();
+        if (bitmap != null) {
+            imgAnalytic.setImageBitmap(bitmap);
+        }
+
         StringBuilder tmp = new StringBuilder();
         for (String str : labels)
-            tmp.append(str);
+            tmp.append(str).append(" ");
         twResultSNPE.setText(tmp.toString());
         runClassifier = true;
+//        unlockFocus();
+        // bitmap.recycle();
     }
 
     static class CompareSizesByArea implements Comparator<Size> {

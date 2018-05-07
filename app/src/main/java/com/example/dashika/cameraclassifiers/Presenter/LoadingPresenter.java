@@ -1,5 +1,6 @@
 package com.example.dashika.cameraclassifiers.Presenter;
 
+import android.app.Activity;
 import android.content.Context;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -43,6 +44,7 @@ public class LoadingPresenter extends BasePresenter {
     @Override
     public void showError(Throwable e) {
         if(e instanceof NoSuchFieldError) {
+            ((Activity) context).finish();
             loadModels();
         }
     }
@@ -57,8 +59,8 @@ public class LoadingPresenter extends BasePresenter {
     private void onModelLoaded(Object obj) {
         if (obj instanceof Events.onModelLoaded) {
             Set<SNPEModel> snpeModels = ((Events.onModelLoaded) obj).getSNPEModel();
+            if(snpeModels.size() == 0) return;
             SNPEModel snpeModel = snpeModels.iterator().next();
-
             Fragment camera2BasicFragment = new Camera2BasicFragment();
             Bundle bundle = new Bundle();
             bundle.putParcelable("SNPEModel", snpeModel);
